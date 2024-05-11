@@ -1,0 +1,22 @@
+# Define variables for paths and script
+R_SCRIPT = scripts/R/data_wrangling_rev_norev.R
+DATA_DIR = data/prep/prl
+OUTPUT_DIR = data/prep/prl
+RAW_DATA_REV = $(DATA_DIR)/groundhog_raw.csv
+RAW_DATA_NOREV = $(DATA_DIR)/groundhog_norev_raw.csv
+FINAL_OUTPUT = $(OUTPUT_DIR)/groundhog_clean_rev_norev.csv
+
+# Default target
+all: $(FINAL_OUTPUT)
+
+# Rule to create the final output
+$(FINAL_OUTPUT): $(RAW_DATA_REV) $(RAW_DATA_NOREV) $(R_SCRIPT)
+	@echo "Running R script to process data..."
+	Rscript --vanilla $(R_SCRIPT)
+
+# Rule to clean up the output
+clean:
+	@echo "Cleaning up..."
+	rm -f $(FINAL_OUTPUT)
+
+.PHONY: all clean

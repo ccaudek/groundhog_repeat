@@ -1,0 +1,22 @@
+# Define variables
+R_SCRIPT = scripts/R/import_norev_mpath_data.R
+DATA_DIR = data/raw/control_data
+OUTPUT_DIR = data/prep/prl
+EXCEL_DATA = $(DATA_DIR)/data.xlsx
+RAW_DATA_DIR = $(DATA_DIR)/control_data
+FINAL_OUTPUT = $(OUTPUT_DIR)/groundhog_norev_raw.csv
+
+# Default target
+all: $(FINAL_OUTPUT)
+
+# Rule to create the final output
+$(FINAL_OUTPUT): $(EXCEL_DATA) $(R_SCRIPT)
+	@echo "Running R script to process data..."
+	Rscript --vanilla $(R_SCRIPT)
+
+# Rule to clean up the output
+clean:
+	@echo "Cleaning up..."
+	rm -f $(FINAL_OUTPUT)
+
+.PHONY: all clean

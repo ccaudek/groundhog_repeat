@@ -1,0 +1,21 @@
+# Define variables for paths and script
+R_SCRIPT = scripts/R/RL/generate_hddmrl_data.R
+INPUT_DIR = data/prep/prl
+OUTPUT_DIR = data/prep/prl/hddrl
+INPUT_FILE = $(INPUT_DIR)/groundhog_clean_rev_norev.csv
+OUTPUT_FILE = $(OUTPUT_DIR)/groundhog_hddmrl_data.csv
+
+# Default target
+all: $(OUTPUT_FILE)
+
+# Rule to create the final output
+$(OUTPUT_FILE): $(INPUT_FILE) $(R_SCRIPT)
+	@echo "Running R script to process data for HDDM..."
+	Rscript --vanilla $(R_SCRIPT)
+
+# Rule to clean up the output
+clean:
+	@echo "Cleaning up..."
+	rm -f $(OUTPUT_FILE)
+
+.PHONY: all clean

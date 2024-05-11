@@ -1,0 +1,139 @@
+# Script name: generate_hddmrl_data.R
+# Project: groundhog_day
+# Script purpose: get data for haddm analysis
+# @author: Corrado Caudek <corrado.caudek@unifi.it>
+# Date Created: Tue Jun  6 08:29:46 2023
+# Last Modified Date: Sat May 11 07:38:22 2024
+
+suppressPackageStartupMessages(library("rio"))
+suppressPackageStartupMessages(library("tidyverse"))
+
+# ---------------------
+# Read RDS file
+# ---------------------
+
+# d <- readRDS(file = snakemake@input[["clean"]])
+# d <- readRDS("data/prep/groundhog_clean.RDS")
+d <- rio::import(
+  here::here("data", "prep", "prl", "groundhog_clean_rev_norev.csv")
+)
+
+# Remove subjects with no reversal
+d <- d |> 
+  dplyr::filter(is_reversal == 1)
+
+# ---------------------
+# Add required columns for HDDMrl
+# ---------------------
+
+d$subj_idx <- as.numeric(factor(as.character(d$user_id)))
+
+# 'trial' must be a vector from 1 to nj, where nj is the max number of 
+# trials for each participant.
+df_indexed <- d %>%
+    group_by(subj_idx) %>%
+    mutate(row_index = row_number())
+
+df_indexed$trial_in_block <- df_indexed$trial
+df_indexed$trial <- df_indexed$row_index
+
+# Perhaps, the extreme values (-50, +50) should be considered as NA and
+# imputation is necessary.
+# hist(df_indexed$mood_pre)
+
+q <- quantile(df_indexed$mood_post, c(0, 1 / 3, 2 / 3, 1))
+
+# maybe use mood_pre? Or the difference mood_post - mood_pre?
+df_indexed$fmood <- ifelse(
+  df_indexed$mood_post < q[2], "low",
+    ifelse(
+      df_indexed$mood_post >= q[2] & df_indexed$mood_post < q[3], "med", "high")
+) |>
+    as.factor()
+
+df_indexed$fmood <- factor(df_indexed$fmood, levels = c("low", "med", "high"))
+
+# table(df_indexed$fmood)
+
+# hist(log(df_indexed$rt_inst))
+# hist(log(df_indexed$rt))
+
+# fm <- lme4::lmer(
+#   log(rt_inst) ~ trial_in_block + instant_mood + days +
+#     (1 + trial_in_block + days + instant_mood | subj_idx), 
+#   df_indexed
+# )
+# Given a strong relation between instant moood and RTs for this response,
+# I could filter subjects so as to remove those who do not show this relation
+# because of careless responding.
+
+# foo <- df_indexed |>
+#     group_by(user_id, days, fmood) |>
+#     summarize(
+#         mood_post = mean(mood_post),
+#         gain = mean(gain)
+#     ) |> 
+#   ungroup()
+# 
+# foo$gain <- ifelse(foo$gain < -20 | foo$gain > 20, mean(foo$gain), foo$gain)
+# fm <- lmer(gain ~ days + mood_post + (1 + days | user_id), foo)
+
+df_indexed$mood_num <- as.numeric(df_indexed$fmood)
+# low: 1; med: 2, high: 3
+
+# Code the response column with [stimulus-coding].
+df_indexed$response <- df_indexed$is_target_chosen
+# Include a column called ‘split_by’ which identifies the different task 
+# conditions (as integers), to ensure reward updating will work properly 
+# for each condition without mixing values learned from one trial type to 
+# another.  (e.g. if you have stimulus A and get reward you want that 
+# updated value to impact choice only for the next stimulus A trial but 
+# not necessarily the immediate trial afterwards, which may be of a 
+# different condition)
+df_indexed$split_by <- df_indexed$is_target_chosen 
+df_indexed$q_init <- 0.5
+
+df_sorted <- df_indexed[
+  order(df_indexed$subj_idx, df_indexed$mood_num, df_indexed$trial), ]
+
+for_hddm_df <- df_sorted |>
+  dplyr::select(
+    subj_idx, user_id, epoch, ema_number, control, 
+    fmood, mood_num, mood_pre, mood_post,
+    rt, rt_inst, 
+    response, feedback, split_by, q_init, 
+    trial_in_block, trial
+  ) |> 
+  ungroup()
+
+for_hddm_df <- for_hddm_df[!is.na(for_hddm_df$subj_idx), ]
+
+# ---------------------
+# Save CSV file
+# ---------------------
+
+rio::export(
+  for_hddm_df, 
+  here::here(
+    "data", "prep", "prl", "hddrl", "groundhog_hddmrl_data.csv"
+  )
+)
+
+
+# eof ----
+# 
+# library(hBayesDM)
+# 
+# for_hbayesdm <- for_hddm_df
+# for_hbayesdm$choice <- ifelse(for_hbayesdm$response == 1, 1, 2)
+# for_hbayesdm$outcome <- ifelse(for_hbayesdm$feedback == 1, 1, -1)
+# for_hbayesdm$subjID <- for_hbayesdm$user_id
+# 
+# df <- data.frame(
+#   subjID = factor(for_hbayesdm$subjID),
+#   choice = for_hbayesdm$choice,
+#   outcome = for_hbayesdm$outcome 
+# )
+# 
+# output <- bandit2arm_delta(
+#   data = df, niter = 100, nwarmup = 50, nchain = 4, ncore = 4)
