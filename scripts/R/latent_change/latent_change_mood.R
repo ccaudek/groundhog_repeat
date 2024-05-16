@@ -26,6 +26,7 @@ d <- rio::import(
   here::here("data", "prep", "prl", "groundhog_clean_rev_norev.csv")
 )
 
+# Select the first 10 EMA sessions
 out <- d[d$ema_number < 11, ] |> 
   group_by(is_reversal, user_id) |> 
   summarize(
@@ -33,6 +34,7 @@ out <- d[d$ema_number < 11, ] |>
   ) |> 
   ungroup()
 
+# Remove participants with low performance
 plot(density(out$fdbk))
 
 out_clean <- out[out$fdbk > 0.44, ]
@@ -54,6 +56,7 @@ good2_user_id <- na.omit(unique(out2_clean$user_id))
 
 df3 <- df[df$user_id %in% good2_user_id, ]
 
+# Remove no-reversal condition
 # There are no enough data in the no-reversal condition
 temp <- df3[df3$is_reversal == 0, ]
 temp |> 
@@ -79,6 +82,7 @@ out3 <- df3[(df3$ema_number < 11) & (df3$is_reversal == 1), ] |>
   ) |> 
   ungroup()
 
+# Examine mood change (post - pre) as a function of EMA number
 out4 <- out3 |> 
   group_by(is_reversal, ema_number) |> 
   summarize(
@@ -95,6 +99,7 @@ out4 %>%
   geom_line() +
   theme(panel.grid = element_blank()) 
   
+# Plot a subset of participants
 subset_it <- unique(out3$user_id)[1:9]
 temp <- out3[out3$user_id %in% subset_it, ]
 
@@ -106,7 +111,7 @@ temp %>%
   theme(panel.grid = element_blank()) +
   facet_wrap(~user_id)
 
-
+# Plot curve for all participants
 out3 |> # data set
   ggplot(aes(x = ema_number, y = mood_ch, group = user_id)) + # setting variables
   geom_point(size = .5) + # adding points to plot
@@ -124,7 +129,7 @@ out3 |> # data set
     name = "Mood Change"
   )
 
-
+# lmer analysis
 m <- lmer(mood_ch ~ ema_number + (ema_number | user_id), data = out3)
 summary(m)
 
@@ -146,6 +151,7 @@ plot(
   varlab = "Within Person Math Scores"
 )
 
+# ICC is very low
 iccMixed(
   dv = "mood_ch",
   id = c("user_id"),
@@ -153,13 +159,14 @@ iccMixed(
 ) |>
   print()
 
+# The growth is very weak
 modelPerformance(m) 
 
 
 dat <- out3 |>
   dplyr::select(user_id, ema_number, mood_ch)
 
-
+# Convert data in wide format
 dat_wide <- dat %>%
   pivot_wider(
     names_from = ema_number,      # La colonna che diventerà le nuove intestazioni delle colonne
@@ -174,11 +181,17 @@ colnames(dat_wide) <- c(
 # Convert all character columns to factors
 dat_wide[] <- lapply(dat_wide, function(x) if(is.character(x)) factor(x) else x)
 
+# Select the first 8 EMA points
 dat_wide8 <- dat_wide |> 
   dplyr::select(-c(chmood9, chmood10))
 
-# Deterministic regression imputation
+# Deterministic regression imputation ------------------------------------------
+
 # imp <- mice(temp, method = "norm.predict", m = 1) # Impute data
+
+x_var_list <- paste0("chmood", 1:8)
+x_var_list
+
 imputed_data <- mice(dat_wide8, m=1, method='pmm', seed=1234)
 
 d_imp <- complete(imputed_data)
@@ -193,9 +206,8 @@ plot_trajectories(
   title_n = TRUE
 )
 
-x_var_list <- paste0("chmood", 1:8)
-x_var_list
 
+# Fit latent growth
 uni_lavaan_results <- fit_uni_lcsm(
   data = dat_wide8, 
   missing="fiml",
@@ -380,8 +392,12 @@ glimpse(dd_long)
 
 hist(dd_long$value)
 
-dd_long$time <- as.numeric(dd_long$time)
-fm <- lmer(value ~ time + (1| id), data = dd_long)
+dd_long$time <- as.character(dd_long$time)
+
+dd_long <- dd_long %>%
+  mutate(time_numeric = as.numeric(substr(time, nchar(time), nchar(time))))
+
+fm <- lmer(value ~ time_numeric + (time_numeric| id), data = dd_long)
 summary(fm)
 
 qqnorm(resid(fm))
@@ -391,6 +407,7 @@ plot(fitted(fm), resid(fm))
 abline(h = 0, col = "red")
 
 plot(predict(fm), dd_long$value)
+
 
 # -------------------------
 # Condizione di no reversal
